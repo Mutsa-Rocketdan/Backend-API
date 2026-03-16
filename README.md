@@ -1,161 +1,62 @@
-# AI 복습 퀴즈 & 학습 가이드 생성기
+# AI Quiz & Guide Generator - Backend API (Mutsa Rocketdan)
 
-강의 스크립트(STT)와 커리큘럼을 기반으로 퀴즈와 주차별 학습 가이드를 자동 생성하는 웹 서비스입니다.
+멋사 로켓단 프로젝트의 중심 역할을 하는 백엔드 API 서버입니다. 사용자 인증, 강의 자료 관리, AI 작업 트래킹 및 데이터 영속성을 담당합니다.
 
----
+## 🚀 주요 기술 스택
+- **FastAPI**: 현대적이고 성능이 뛰어난 웹 프레임워크
+- **PostgreSQL**: 안정적인 관계형 데이터베이스
+- **Docker & Docker Compose**: 일관된 개발 및 배포 환경 구축
+- **SQLAlchemy**: 강력한 Python SQL 툴킷 및 ORM
+- **JWT (python-jose)**: 무상태(Stateless) 기반 사용자 인증
+- **Alembic**: 데이터베이스 마이그레이션 관리
 
-## 요구 사항
+## 🛠 주요 기능
+- **회원 인증 (Auth)**: JWT 토큰 기반의 회원가입 및 로그인 시스템
+- **강의 관리 (Lecture)**: 강의 자료 업로드 및 목록 상세 조회
+- **AI 작업 트래킹 (Task)**: 비동기 방식의 지식 추출 작업 진행 상태 추적 (Progress % 지원)
+- **기능 인터페이스**: AI 파이프라인과 연결 가능한 통합 서비스 구조 (`ai_service.py`)
 
-- **Python 3.11** (3.10 이상 권장)
-- 강의 스크립트 텍스트 파일 및 `강의 커리큘럼.csv` (프로젝트에 포함)
+## 🏗 설치 및 실행 방법
 
----
+### 1. 사전 준비
+- Docker 및 Docker Compose가 설치되어 있어야 합니다.
 
-## 1. 저장소 클론 후 이동
+### 2. 환경 변수 설정
+프로젝트 루트 폴더에 `.env` 파일을 생성하고 아래 내용을 설정합니다.
+```env
+# Database
+POSTGRES_USER=myuser
+POSTGRES_PASSWORD=mypassword
+POSTGRES_DB=quiz_guide_db
+DATABASE_URL=postgresql://myuser:mypassword@db:5432/quiz_guide_db
 
-```bash
-git clone <저장소 URL>
-cd create_quiz_guide
+# API
+API_EXTERNAL_PORT=8001
+JWT_SECRET_KEY=your_secret_key_here  # 실제 서비스 시 복잡한 키로 변경 필수
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
 ```
 
----
-
-## 2. 가상환경 생성 및 활성화
-
-### Windows (PowerShell)
-
+### 3. 도커 실행
 ```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+docker-compose up -d --build
 ```
 
-실행 정책 오류 시:
-
+### 4. 데이터베이스 초기화 (마이그레이션)
+컨테이너 실행 후 아래 명령어로 DB 테이블을 생성합니다.
 ```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+docker-compose exec api alembic upgrade head
 ```
 
-### Windows (CMD)
+## 📚 API 문서 확인
+서버 실행 후 브라우저를 통해 실시간 API 문서를 확인할 수 있습니다.
+- **Swagger UI**: [http://localhost:8001/docs](http://localhost:8001/docs)
+- **ReDoc**: [http://localhost:8001/redoc](http://localhost:8001/redoc)
 
-```cmd
-python -m venv venv
-venv\Scripts\activate.bat
-```
-
-### macOS / Linux
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-가상환경이 활성화되면 프롬프트 앞에 `(venv)`가 표시됩니다.
+## 📁 저장소 역할 구분
+본 저장소는 **백엔드 API** 코드만을 포함합니다.
+- **AI 로직**: [AI-Pipeline](https://github.com/Mutsa-Rocketdan/AI-Pipeline) 레포지토리에서 별도 관리
+- **프론트엔드**: [Frontend-App](https://github.com/Mutsa-Rocketdan/Frontend-App) 레포지토리에서 별도 관리
 
 ---
-
-## 3. 의존성 설치
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## 4. 환경 변수 설정 (.env)
-
-프로젝트 루트에 `.env` 파일을 만들고 OpenAI API 키를 넣습니다.
-
-```bash
-# .env
-OPENAI_API_KEY=sk-your-openai-api-key-here
-```
-
-- **퀴즈/학습 가이드 생성**은 OpenAI Chat API(GPT-4o)를 사용합니다.
-- **벡터DB 임베딩**은 `config.yaml`에서 `embedding_backend: "local"`로 두면 API 없이 로컬 모델만 사용할 수 있습니다 (할당량/비용 절약).
-
-`.env`는 Git에 올리지 마세요. (이미 `.gitignore`에 포함하는 것을 권장합니다.)
-
----
-
-## 5. 설정 확인 (config.yaml)
-
-- **embedding_backend**: `"local"` (로컬 임베딩, API 불필요) 또는 `"openai"` (OpenAI 임베딩 API 사용)
-- **paths**: `강의 스크립트` 폴더, `강의 커리큘럼.csv` 경로가 프로젝트 구조와 맞는지 확인
-
-필요 시 `config.yaml`에서 위 항목만 수정하면 됩니다.
-
----
-
-## 6. Streamlit 앱 실행
-
-```bash
-streamlit run app.py
-```
-
-브라우저가 자동으로 열리지 않으면 터미널에 표시되는 주소(예: `http://localhost:8501`)로 접속합니다.
-
----
-
-## 7. 최초 실행 시: 벡터DB 구축
-
-1. 메인 페이지에서 **「벡터DB 구축하기」** 버튼을 클릭합니다.
-2. 강의 스크립트를 분석해 임베딩을 만들고 FAISS 인덱스를 저장합니다.
-3. 한 번 구축해 두면 이후에는 자동으로 저장된 벡터DB를 사용합니다.
-
-- `embedding_backend: "local"`이면 최초 1회 로컬 모델 다운로드가 있을 수 있습니다.
-- 프로젝트 경로에 한글이 있으면 벡터DB는 시스템 임시 폴더에 저장되며, 경로는 `data/vectorstore/faiss_location.txt`에 기록됩니다.
-
----
-
-## 8. 주요 기능
-
-| 페이지 | 설명 |
-|--------|------|
-| 메인 | 벡터DB 구축, 강의 일정 확인, 각 페이지로 이동 |
-| 퀴즈 풀기 | 날짜/유형/난이도 선택 후 퀴즈 생성 및 풀이, 정답/해설 확인 |
-| 학습 가이드 | 주차별·날짜별 요약, 핵심 개념, 복습 포인트, 개념 관계 맵 |
-| 학습 분석 | 퀴즈 결과 통계, 취약 영역, 학습 추천 |
-
----
-
-## 9. 디렉터리 구조 (참고)
-
-```
-create_quiz_guide/
-├── app.py                 # Streamlit 메인 앱
-├── config.yaml            # 설정 (임베딩 백엔드, 경로 등)
-├── requirements.txt
-├── .env                   # OPENAI_API_KEY (본인 PC에서만 생성)
-├── src/                   # 핵심 모듈
-├── pages/                 # 퀴즈 풀기, 학습 가이드, 학습 분석
-├── data/
-│   ├── vectorstore/       # FAISS 인덱스 및 메타데이터 (구축 후 생성)
-│   └── generated/         # 생성된 퀴즈·가이드 JSON 캐시
-├── 강의 스크립트/          # STT 텍스트 파일 (.txt)
-└── 강의 커리큘럼.csv       # 주차·날짜·과목·학습목표
-```
-
----
-
-## 10. 문제 해결
-
-| 현상 | 확인 사항 |
-|------|------------|
-| `pip` 또는 `streamlit`을 찾을 수 없음 | 가상환경이 활성화되었는지 확인 (`(venv)` 표시). `python -m pip`, `python -m streamlit run app.py` 사용 |
-| OpenAI 429 (할당량 초과) | 퀴즈/가이드 생성은 API 필요. `config.yaml`의 `embedding_backend`를 `"local"`로 두면 **벡터DB 구축**만 API 없이 가능 |
-| 벡터DB 구축 시 "Illegal byte sequence" | 프로젝트 경로에 한글이 있어도 코드에서 임시 경로로 저장하도록 되어 있음. 최신 코드 기준으로 다시 시도 |
-| 퀴즈/가이드가 생성되지 않음 | `.env`에 `OPENAI_API_KEY`가 올바르게 설정되었는지, 네트워크/방화벽 확인 |
-
----
-
-## 11. 팀원 공유 체크리스트
-
-- [ ] 저장소 클론
-- [ ] Python 3.11(또는 3.10+) 설치
-- [ ] 가상환경 생성 및 활성화
-- [ ] `pip install -r requirements.txt`
-- [ ] `.env`에 `OPENAI_API_KEY` 설정 (퀴즈/가이드 생성용)
-- [ ] `streamlit run app.py` 실행
-- [ ] 메인 페이지에서 벡터DB 구축 1회 실행
-
-위 순서대로 진행하면 동일 환경에서 구동할 수 있습니다.
+© 2026 Mutsa Rocketdan
