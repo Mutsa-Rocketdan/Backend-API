@@ -116,7 +116,10 @@ async def create_lecture(
     db.refresh(new_lecture)
     db.refresh(new_task)
     
-    # 3. 비동기로 개념 추출 작업 시작 (진짜 AI 로직으로 갈아끼우기 쉬운 서비스 호출)
+    # 3. 비동기 작업을 응답 객체에 연결 (스키마 반영)
+    new_lecture.task_id = new_task.task_id
+    
+    # 4. 비동기로 개념 추출 작업 시작
     background_tasks.add_task(
         ai_service.run_concept_extraction, 
         new_lecture.id, 

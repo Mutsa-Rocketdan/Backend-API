@@ -65,6 +65,7 @@ class LectureCreate(LectureBase):
 class LectureResponse(LectureBase):
     id: UUID
     user_id: UUID
+    task_id: Optional[UUID] = None  # AI 작업 추적용 ID 추가
     created_at: datetime
 
     class Config:
