@@ -16,6 +16,34 @@
 - **AI 작업 트래킹 (Task)**: 비동기 방식의 지식 추출 작업 진행 상태 추적 (Progress % 지원)
 - **기능 인터페이스**: AI 파이프라인과 연결 가능한 통합 서비스 구조 (`ai_service.py`)
 
+## 📊 데이터베이스 구조 (Database Schema)
+
+본 프로젝트는 지식의 추출과 개인화된 학습 트래킹을 위해 체계적인 관계형 모델을 사용합니다.
+
+### ERD (Entity Relationship Diagram)
+
+```mermaid
+erDiagram
+    Users ||--o| UserProfiles : "1:1 확장"
+    Users ||--o{ Lectures : "강의 소유"
+    Users ||--o{ AITasks : "작업 추적"
+    Users ||--o{ QuizResults : "시험 수행"
+    
+    Lectures ||--o{ Concepts : "지식 추출"
+    Lectures ||--o{ Quizzes : "퀴즈 생성"
+    
+    Quizzes ||--o{ QuizQuestions : "문항 포함"
+    Quizzes ||--o{ QuizResults : "결과 기록"
+```
+
+### 테이블 상세 역할
+- **Users**: 회원의 기본 계정 정보 및 인증 관리
+- **Lectures**: 사용자가 업로드한 원본 강의 텍스트 및 메타데이터
+- **Concepts**: 강의에서 AI가 추출한 핵심 지식 단위 및 숙련도(Mastery) 정보
+- **Quizzes & Questions**: 생성된 퀴즈 한 묶음과 객관식 문항 데이터
+- **QuizResults**: 사용자가 제출한 답안, 최종 점수 및 AI 맞춤 피드백
+- **AITasks**: 비동기로 진행되는 AI 연산의 실시간 상태(Progress %)
+
 ## 🏗 설치 및 실행 방법
 
 ### 1. 사전 준비
