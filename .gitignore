@@ -19,3 +19,18 @@ ENV/
 # IDE
 .vscode/
 .idea/
+
+# AI Logic (Managed by AI Team)
+src/preprocessing.py
+src/embeddings.py
+src/quiz_generator.py
+src/guide_generator.py
+src/feedback.py
+src/prompts.py
+src/rag.py
+src/__init__.py
+src/__pycache__/
+config.yaml
+
+# Legacy UI
+streamlit_app.py
