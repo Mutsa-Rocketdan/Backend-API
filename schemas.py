@@ -86,3 +86,49 @@ class ConceptResponse(ConceptBase):
 
 class ConceptUpdate(BaseModel):
     mastery_score: float
+
+# --- Quiz Schemas ---
+class QuizQuestionBase(BaseModel):
+    question_text: str
+    options: List[str]
+    correct_answer: str
+    explanation: Optional[str] = None
+
+class QuizQuestionResponse(QuizQuestionBase):
+    id: int
+    quiz_id: UUID
+
+    class Config:
+        from_attributes = True
+
+class QuizBase(BaseModel):
+    title: str
+
+class QuizCreate(QuizBase):
+    pass
+
+class QuizResponse(QuizBase):
+    id: UUID
+    lecture_id: UUID
+    user_id: UUID
+    task_id: Optional[UUID] = None
+    created_at: datetime
+    questions: List[QuizQuestionResponse] = []
+
+    class Config:
+        from_attributes = True
+
+# --- Quiz Result Schemas ---
+class QuizResultCreate(BaseModel):
+    score: int
+    user_answers: List[str] # Or a more complex structure matching choices
+    ai_feedback: Optional[str] = None
+
+class QuizResultResponse(QuizResultCreate):
+    id: int
+    user_id: UUID
+    quiz_id: UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

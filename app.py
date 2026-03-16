@@ -160,3 +160,97 @@ def get_lecture_concepts(
         raise HTTPException(status_code=404, detail="Lecture not found")
         
     return db.query(models.Concept).filter(models.Concept.lecture_id == lecture_id).all()
+
+# --- Phase 5: Quiz & QuizResult APIs ---
+
+@app.post("/lectures/{lecture_id}/quizzes", response_model=schemas.QuizResponse)
+def create_quiz(
+    lecture_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """특정 강의를 바탕으로 AI 퀴즈 생성을 시작합니다."""
+    lecture = db.query(models.Lecture).filter(
+        models.Lecture.id == lecture_id, 
+        models.Lecture.user_id == current_user.id
+    ).first()
+    
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+
+    # 1. 퀴즈 객체 생성
+    new_quiz = models.Quiz(
+        lecture_id=lecture_id,
+        user_id=current_user.id,
+        title=f"{lecture.title} 복습 퀴즈"
+    )
+    db.add(new_quiz)
+    db.flush()
+
+    # 2. 비동기 작업 생성
+    new_task = models.AITask(
+        user_id=current_user.id,
+        type="quiz_generation",
+        status=models.TaskStatus.PENDING,
+        progress=0
+    )
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_quiz)
+    
+    new_quiz.task_id = new_task.task_id
+
+    # 3. 비동기 퀴즈 생성 작업 시작
+    background_tasks.add_task(
+        ai_service.run_quiz_generation,
+        new_quiz.id,
+        lecture.content,
+        new_task.task_id,
+        SessionLocal()
+    )
+
+    return new_quiz
+
+@app.get("/quizzes/{quiz_id}", response_model=schemas.QuizResponse)
+def get_quiz(quiz_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """특정 퀴즈의 문항들을 포함하여 조회합니다."""
+    quiz = db.query(models.Quiz).filter(
+        models.Quiz.id == quiz_id, 
+        models.Quiz.user_id == current_user.id
+    ).first()
+    
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    
+    # 여기서 questions는 relationship에 의해 자동 로드됨
+    return quiz
+
+@app.post("/quizzes/{quiz_id}/results", response_model=schemas.QuizResultResponse)
+def submit_quiz_result(
+    quiz_id: UUID,
+    result: schemas.QuizResultCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """퀴즈 풀이 결과를 저장합니다."""
+    quiz = db.query(models.Quiz).filter(models.Quiz.id == quiz_id).first()
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    new_result = models.QuizResult(
+        user_id=current_user.id,
+        quiz_id=quiz_id,
+        score=result.score,
+        user_answers=result.user_answers,
+        ai_feedback=result.ai_feedback
+    )
+    db.add(new_result)
+    db.commit()
+    db.refresh(new_result)
+    return new_result
+
+@app.get("/quiz-results", response_model=List[schemas.QuizResultResponse])
+def get_my_quiz_results(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """내가 수행한 모든 퀴즈 결과 내역을 가져옵니다."""
+    return db.query(models.QuizResult).filter(models.QuizResult.user_id == current_user.id).all()

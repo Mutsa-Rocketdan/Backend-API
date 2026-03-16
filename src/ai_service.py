@@ -62,6 +62,58 @@ def run_concept_extraction(lecture_id: str, content: str, task_id: uuid.UUID, db
         print(f"Error in AI task {task_id}: {str(e)}")
         db.commit()
 
+def run_quiz_generation(quiz_id: uuid.UUID, lecture_content: str, task_id: uuid.UUID, db: Session):
+    """
+    AI를 사용하여 퀴즈 문항을 생성하는 프로세스 시뮬레이터입니다.
+    """
+    try:
+        update_task_status(db, task_id, status=models.TaskStatus.PROCESSING, progress=10)
+        time.sleep(1)
+
+        # [단계 2] 강의 내용 분석 및 문제 초안 작성
+        update_task_status(db, task_id, progress=40)
+        time.sleep(1)
+
+        # [단계 3] AI 모델 호출 (퀴즈 문항 생성)
+        # TODO: 실제 AI 프롬프트를 사용하여 객관식 문제를 생성하세요.
+        update_task_status(db, task_id, progress=80)
+        time.sleep(1)
+
+        # [단계 4] 생성된 문항 저장
+        mock_questions = [
+            {
+                "text": "파이썬에서 리스트의 길이를 구하는 함수는?",
+                "options": ["size()", "length()", "len()", "count()"],
+                "answer": "len()",
+                "explanation": "len() 함수는 파이썬 내장 함수로 시퀀스의 길이를 반환합니다."
+            },
+            {
+                "text": "다음 중 파이썬의 데이터 타입이 아닌 것은?",
+                "options": ["int", "float", "double", "str"],
+                "answer": "double",
+                "explanation": "파이썬에서는 소수점을 float으로 처리하며 double은 별도로 존재하지 않습니다."
+            }
+        ]
+
+        for q in mock_questions:
+            new_question = models.QuizQuestion(
+                quiz_id=quiz_id,
+                question_text=q["text"],
+                options=q["options"],
+                correct_answer=q["answer"],
+                explanation=q["explanation"]
+            )
+            db.add(new_question)
+
+        # [단계 5] 완료
+        update_task_status(db, task_id, status=models.TaskStatus.COMPLETED, progress=100)
+        db.commit()
+
+    except Exception as e:
+        update_task_status(db, task_id, status=models.TaskStatus.FAILED, progress=0)
+        print(f"Error in Quiz generation task {task_id}: {str(e)}")
+        db.commit()
+
 def update_task_status(db: Session, task_id: uuid.UUID, status: models.TaskStatus = None, progress: int = None):
     """DB의 AITask 상태를 실시간으로 업데이트합니다."""
     task = db.query(models.AITask).filter(models.AITask.task_id == task_id).first()
