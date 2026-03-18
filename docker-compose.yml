@@ -29,10 +29,8 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: quiz_guide_tunnel
     restart: always
-    # Connects to the host's 8001 port (API_EXTERNAL_PORT)
-    command: tunnel --url http://host.docker.internal:${API_EXTERNAL_PORT}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # Connects directly to the api service via Docker's internal network (port 8000)
+    command: tunnel --url http://api:8000
     depends_on:
       - api
 
