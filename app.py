@@ -9,12 +9,79 @@ from dotenv import load_dotenv
 import models, schemas, auth
 from database import engine, SessionLocal, get_db
 
+import sentry_sdk
+from prometheus_fastapi_instrumentator import Instrumentator
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+import secrets
+
 load_dotenv()
+
+# --- Phase 6: Sentry Monitoring ---
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        # Set traces_sample_rate to 1.0 to capture 100%
+        # of transactions for performance monitoring.
+        traces_sample_rate=1.0,
+        # Set profiles_sample_rate to 1.0 to profile 100%
+        # of sampled transactions.
+        # We recommend adjusting this value in production.
+        profiles_sample_rate=1.0,
+    )
+
+# --- Phase 7: Rate Limiting Setup ---
+limiter = Limiter(key_func=get_remote_address)
 
 # DB 테이블 생성 (Alembic을 썼지만, 혹시 모를 상황 대비)
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="AI Quiz & Guide Backend")
+# Swagger/ReDoc을 커스텀 보호하기 위해 기본값은 비활성화
+app = FastAPI(
+    title="AI Quiz & Guide Backend",
+    docs_url=None, 
+    redoc_url=None
+)
+
+# --- Phase 7: CORS Setup ---
+# 추후 프론트엔드 도메인이 확정되면 ["https://your-app.vercel.app"] 등으로 수정 필요
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Rate Limit 예외 처리 등록
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# --- Phase 6: Prometheus Metrics ---
+Instrumentator().instrument(app).expose(app)
+
+# --- Phase 7: Basic Auth for Docs ---
+security_basic = HTTPBasic()
+
+def authenticate_docs(credentials: HTTPBasicCredentials = Depends(security_basic)):
+    correct_username = os.getenv("DOCS_USERNAME", "admin")
+    correct_password = os.getenv("DOCS_PASSWORD", "quiz-guide-secret")
+    
+    is_username_correct = secrets.compare_digest(credentials.username, correct_username)
+    is_password_correct = secrets.compare_digest(credentials.password, correct_password)
+    
+    if not (is_username_correct and is_password_correct):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect docs credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -43,8 +110,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 # --- API 엔드포인트 ---
 
 @app.get("/")
-async def root():
-    return {"message": "AI Quiz & Guide Backend is running", "version": "1.0.0"}
+@limiter.limit("5/minute")
+async def root(request: auth.Request): # slowapi requires 'request' argument
+    return {"message": "AI Quiz & Guide Backend is running", "version": "1.0.1"}
+
+# --- Protected Docs Endpoints ---
+@app.get("/docs", include_in_schema=False)
+async def get_protected_docs(credentials: HTTPBasicCredentials = Depends(authenticate_docs)):
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="API Docs")
+
+@app.get("/redoc", include_in_schema=False)
+async def get_protected_redoc(credentials: HTTPBasicCredentials = Depends(authenticate_docs)):
+    return get_redoc_html(openapi_url="/openapi.json", title="API Redoc")
 
 @app.post("/register", response_model=schemas.UserResponse)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -65,7 +142,12 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 @app.post("/login", response_model=schemas.Token)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login_for_access_token(
+    request: auth.Request,
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(get_db)
+):
     """사용자 확인 후 출입증(JWT 토큰)을 발급합니다 (로그인)"""
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not auth.verify_password(form_data.password, user.hashed_password):

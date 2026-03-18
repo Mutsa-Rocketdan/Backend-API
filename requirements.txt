@@ -13,3 +13,6 @@ openai
 tiktoken
 pandas
 alembic
+sentry-sdk[fastapi]
+prometheus-fastapi-instrumentator
+slowapi
