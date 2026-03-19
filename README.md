@@ -49,29 +49,16 @@
 
 ```mermaid
 erDiagram
-    Users {
-        uuid id PK
-        string email UK
-        string hashed_password
-        string nickname
-        enum role
-        boolean is_active
-        datetime created_at
-    }
-    Lectures {
-        uuid id PK
-        uuid user_id FK
-        string title
-        text content
-        boolean is_active
-    }
-    Quizzes {
-        uuid id PK
-        uuid lecture_id FK
-        uuid user_id FK
-        string title
-        boolean is_active
-    }
+    Users ||--o| UserProfiles : "1:1 확장"
+    Users ||--o{ Lectures : "강의 소유"
+    Users ||--o{ AITasks : "작업 추적"
+    Users ||--o{ QuizResults : "시험 수행"
+    
+    Lectures ||--o{ Concepts : "지식 추출"
+    Lectures ||--o{ Quizzes : "퀴즈 생성"
+    
+    Quizzes ||--o{ QuizQuestions : "문항 포함"
+    Quizzes ||--o{ QuizResults : "결과 기록"
 ```
 
 ### 테이블 상세 역할
