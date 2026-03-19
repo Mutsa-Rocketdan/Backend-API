@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
-from models import LearningLevel, TaskStatus
+from models import LearningLevel, TaskStatus, UserRole
 
 # --- User Schemas ---
 class UserBase(BaseModel):
@@ -14,6 +14,7 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     id: UUID
+    role: UserRole
     is_active: bool
     created_at: datetime
 
@@ -58,6 +59,7 @@ class AITaskResponse(AITaskBase):
 class LectureBase(BaseModel):
     title: str
     content: str
+    is_active: bool = True
 
 class LectureCreate(LectureBase):
     pass
@@ -103,6 +105,7 @@ class QuizQuestionResponse(QuizQuestionBase):
 
 class QuizBase(BaseModel):
     title: str
+    is_active: bool = True
 
 class QuizCreate(QuizBase):
     pass

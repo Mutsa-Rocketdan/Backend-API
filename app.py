@@ -107,6 +107,15 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return user
 
+async def get_current_admin(current_user: models.User = Depends(get_current_user)):
+    """현재 사용자가 관리자(ADMIN) 권한을 가지고 있는지 확인합니다."""
+    if current_user.role != models.UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have enough permissions to perform this action."
+        )
+    return current_user
+
 # --- API 엔드포인트 ---
 
 @app.get("/")
@@ -175,12 +184,12 @@ async def create_lecture(
     lecture: schemas.LectureCreate, 
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_admin: models.User = Depends(get_current_admin)
 ):
-    """새로운 강의 자료를 업로드하고 개념 추출을 시작합니다."""
+    """(관리자 전용) 새로운 강의 자료를 업로드하고 개념 추출을 시작합니다."""
     # 1. 강의 저장
     new_lecture = models.Lecture(
-        user_id=current_user.id,
+        user_id=current_admin.id,
         title=lecture.title,
         content=lecture.content
     )
@@ -223,8 +232,25 @@ def get_task_status(task_id: UUID, db: Session = Depends(get_db)):
 
 @app.get("/lectures", response_model=List[schemas.LectureResponse])
 def get_lectures(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """내가 업로드한 모든 강의 자료 목록을 가져옵니다."""
-    return db.query(models.Lecture).filter(models.Lecture.user_id == current_user.id).all()
+    """내가 접근 가능한 활성 강의 자료 목록을 가져옵니다. (Soft Delete된 것은 제외)"""
+    return db.query(models.Lecture).filter(
+        models.Lecture.is_active == True # 활성 상태인 것만 조회
+    ).all()
+
+@app.delete("/lectures/{lecture_id}")
+def delete_lecture(
+    lecture_id: UUID, 
+    db: Session = Depends(get_db), 
+    current_admin: models.User = Depends(get_current_admin)
+):
+    """(관리자 전용) 강의를 삭제(비활성화)합니다. 실제 데이터를 지우지 않고 소프트 삭제 처리합니다."""
+    lecture = db.query(models.Lecture).filter(models.Lecture.id == lecture_id).first()
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+    
+    lecture.is_active = False # Soft Delete 처리
+    db.commit()
+    return {"message": "Lecture successfully deactivated (Soft Delete)"}
 
 @app.get("/lectures/{lecture_id}/concepts", response_model=List[schemas.ConceptResponse])
 def get_lecture_concepts(
@@ -235,7 +261,7 @@ def get_lecture_concepts(
     """특정 강의에서 추출된 지식(개념) 목록을 조회합니다."""
     lecture = db.query(models.Lecture).filter(
         models.Lecture.id == lecture_id, 
-        models.Lecture.user_id == current_user.id
+        models.Lecture.is_active == True # 활성 강의만 개념 조회 가능
     ).first()
     
     if not lecture:
@@ -250,12 +276,12 @@ def create_quiz(
     lecture_id: UUID,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_admin: models.User = Depends(get_current_admin)
 ):
-    """특정 강의를 바탕으로 AI 퀴즈 생성을 시작합니다."""
+    """(관리자 전용) 특정 강의를 바탕으로 AI 퀴즈 생성을 시작합니다."""
     lecture = db.query(models.Lecture).filter(
         models.Lecture.id == lecture_id, 
-        models.Lecture.user_id == current_user.id
+        models.Lecture.is_active == True # 활성 상태인 강의에 대해서만 퀴즈 생성 가능
     ).first()
     
     if not lecture:
@@ -264,7 +290,7 @@ def create_quiz(
     # 1. 퀴즈 객체 생성
     new_quiz = models.Quiz(
         lecture_id=lecture_id,
-        user_id=current_user.id,
+        user_id=current_admin.id,
         title=f"{lecture.title} 복습 퀴즈"
     )
     db.add(new_quiz)
@@ -272,7 +298,7 @@ def create_quiz(
 
     # 2. 비동기 작업 생성
     new_task = models.AITask(
-        user_id=current_user.id,
+        user_id=current_admin.id,
         type="quiz_generation",
         status=models.TaskStatus.PENDING,
         progress=0
@@ -299,7 +325,7 @@ def get_quiz(quiz_id: UUID, db: Session = Depends(get_db), current_user: models.
     """특정 퀴즈의 문항들을 포함하여 조회합니다."""
     quiz = db.query(models.Quiz).filter(
         models.Quiz.id == quiz_id, 
-        models.Quiz.user_id == current_user.id
+        models.Quiz.is_active == True # 활성 퀴즈만 조회 가능
     ).first()
     
     if not quiz:

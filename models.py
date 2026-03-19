@@ -12,6 +12,11 @@ class LearningLevel(str, enum.Enum):
     INTERMEDIATE = "intermediate"
     ADVANCED = "advanced"
 
+class UserRole(str, enum.Enum):
+    USER = "user"
+    ADMIN = "admin"
+
+
 class TaskStatus(str, enum.Enum):
     PENDING = "pending"
     PROCESSING = "processing"
@@ -25,6 +30,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     nickname = Column(String, nullable=True)
+    role = Column(SQLEnum(UserRole), default=UserRole.USER)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -52,6 +58,7 @@ class Lecture(Base):
     content = Column(Text)
     # pgvector 도입 전까지는 JSONB에 임베딩 저장 가능
     vector_embedding = Column(JSONB, nullable=True)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="lectures")
@@ -89,6 +96,7 @@ class Quiz(Base):
     lecture_id = Column(UUID(as_uuid=True), ForeignKey("lectures.id"))
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     title = Column(String)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     lecture = relationship("Lecture", back_populates="quizzes")
