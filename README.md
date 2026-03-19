@@ -33,11 +33,11 @@
 
 ## 🛠 주요 기능
 
-- **회원 인증 (Auth)**: JWT 토큰 기반의 회원가입 및 로그인 시스템
-- **강의 관리 (Lecture)**: 강의 자료 업로드 및 목록 상세 조회
+- **사용자 인증 (Auth)**: JWT 토큰 기반의 회원가입 및 로그인 시스템
+- **강의 관리 (Lecture)**: 강의 자료 업로드 및 목록 상세 조회 (Soft Delete 적용)
+- **권한 관리 (RBAC)**: 관리자(ADMIN)와 일반유저(USER) 역할 분리 및 접근 제어
 - **AI 작업 트래킹 (Task)**: 비동기 방식의 지식 추출 작업 진행 상태 추적 (Progress % 지원)
-- **기능 인터페이스**: AI 파이프라인과 연결 가능한 통합 서비스 구조 (`ai_service.py`)
-- **보안 가드**: CORS 설정 및 모든 API 엔드포인트에 대한 보안 적용
+- **비동기 가드**: 강의 업로드, 퀴즈 생성, 강의 삭제 등 핵심 기능은 관리자만 수행 가능
 
 ---
 
@@ -49,24 +49,37 @@
 
 ```mermaid
 erDiagram
-    Users ||--o| UserProfiles : "1:1 확장"
-    Users ||--o{ Lectures : "강의 소유"
-    Users ||--o{ AITasks : "작업 추적"
-    Users ||--o{ QuizResults : "시험 수행"
-    
-    Lectures ||--o{ Concepts : "지식 추출"
-    Lectures ||--o{ Quizzes : "퀴즈 생성"
-    
-    Quizzes ||--o{ QuizQuestions : "문항 포함"
-    Quizzes ||--o{ QuizResults : "결과 기록"
+    Users {
+        uuid id PK
+        string email UK
+        string hashed_password
+        string nickname
+        enum role
+        boolean is_active
+        datetime created_at
+    }
+    Lectures {
+        uuid id PK
+        uuid user_id FK
+        string title
+        text content
+        boolean is_active
+    }
+    Quizzes {
+        uuid id PK
+        uuid lecture_id FK
+        uuid user_id FK
+        string title
+        boolean is_active
+    }
 ```
 
 ### 테이블 상세 역할
-- **Users**: 회원의 기본 계정 정보 및 인증 관리
-- **Lectures**: 사용자가 업로드한 원본 강의 텍스트 및 메타데이터
+- **Users**: 회원의 기본 계정 정보, 인증 및 역할(Role: USER, ADMIN) 관리
+- **Lectures**: 원본 강의 데이터 및 활성 상태(Soft Delete 여부) 추적
 - **Concepts**: 강의에서 AI가 추출한 핵심 지식 단위 및 숙련도(Mastery) 정보
-- **Quizzes & Questions**: 생성된 퀴즈 한 묶음과 객관식 문항 데이터
-- **QuizResults**: 사용자가 제출한 답안, 최종 점수 및 AI 맞춤 피드백
+- **Quizzes & Questions**: 생성된 퀴즈 한 묶음과 객관식 문항 데이터 (비활성 시 조회 차단)
+- **QuizResults**: 사용자가 제출한 답안, 점수 및 AI 맞춤 피드백 (강의 삭제 후에도 기록 유지)
 - **AITasks**: 비동기로 진행되는 AI 연산의 실시간 상태(Progress %)
 
 ---

@@ -86,9 +86,36 @@
 - [ ] **정적 보안 분석 (Static Analysis)**: Bandit 및 Safety 툴을 활용한 정기 스캔
 - [ ] **ORM 패턴 전수 검사**: 모든 DB 접근에 Parameterized Query 사용 강제
 - [ ] **Secrets Audit**: .env 파일 외 코드 내 비밀 정보 하드코딩 여부 전수 조사
+- [x] **Step 1: DB 스키마 업데이트 (확장성 및 데이터 보존)**: 
+    - `models.py`의 `User` 모델에 `role` (Enum: USER, ADMIN) 컬럼 추가.
+    - `Lecture` 및 `Quiz` 테이블에 `is_active` (Boolean, default=True) 필드 추가 (Soft Delete용).
+- [x] **Step 2: Pydantic 스키마 정교화**: `schemas.py`의 `UserResponse` 업데이트 및 `role` 필드 보호(유저 직접 수정 불가).
+- [x] **Step 3: Security Guard 구현**: `auth.py` 내에 권한별로 판정 가능한 의존성(`RequireRole(["ADMIN"])` 등) 추가.
+- [x] **Step 4: API 분리 및 보호 (Soft Delete)**: 
+    - `app.py`에서 관리자 전용 라이팅(강의 업로드) 기능 가드 적용.
+    - 데이터 삭제 요청 시 DB 레코드 삭제 대신 `is_active=False`로 변경하여 유저의 `QuizResult` 통계 보존.
+- [x] **Step 5: 조회(Query) 가드 반영**: 일반 소비자의 `GET` 요청 시 `is_active=True`인 레코드만 반환되도록 GET API 필터링 보완.
+- [x] **Step 6: 데이터베이스 마이그레이션**: Alembic을 이용해 실제 DB에 Role 체계 및 Soft Delete 필드 반영.
 
 
-## 4. 팀 협업 및 동적 주소 관리 (Collaboration Protocol)
+## 4. AI 기술 협의 및 향후 고도화 이슈 (AI Technical Update & Roadmap)
+
+AI 파이프라이닝 팀과의 논의(2026-03-19)를 통해 도출된 핵심 업데이트 및 장기적 인프라 고려 사항입니다.
+
+### **[데이터 입력 및 머지 전략]**
+- **입력 방식의 유연성**: 현재 JSON 내 `string` 기반 직접 입력을 기본으로 유지하되, 향후 대용량 데이터 및 정형 데이터 처리를 위한 **파일 업로드(CSV/TXT 파일 형태)** 방식 도입 고려.
+- **머지 프로토콜**: 로컬 개발과 실제 AI 연산 결과값의 정합성을 보장하기 위한 머지(Merge) 전략 정립 필요.
+
+### **[어드민 권한 및 보안 모델]**
+- **Admin 전용 권한 부여**: 새로운 스크립트 업로드 및 DB 핵심 스키마 권한(수정/삭제)은 **관리자(Admin)** 계정에만 부여하여 데이터 무결성 보호.
+- **RBAC (Role-Based Access Control)**: 사용자 역할별 세분화된 API 접근 제어 로직 구현 예정.
+
+### **[결과물 패키징 및 차별점 발굴]**
+- **종합 결과 패키징**: 단순히 퀴즈만 제공하는 단계를 넘어 `학습진행률 + 퀴즈 통계 + AI 학습 가이드`를 하나의 패키지로 묶어 완성도 높은 결과물 제공.
+- **차별점(Differentiator)**: 기존 교육 앱 대비 사용자 경험과 기술적 측면에서의 독창적 경쟁력(예: 유사 개념 자동 연계 등) 강화 방안 검토.
+
+
+## 5. 팀 협업 및 동적 주소 관리 (Collaboration Protocol)
 
 > [!IMPORTANT]
 > **분산 개발 환경에서의 통신 전략 (8001 Port & Dynamic URL)**
@@ -97,7 +124,7 @@
 > - **Health Check**: 외부 접속 시 반드시 `/docs`를 통해 서버 가동 여부를 먼저 확인합니다.
 
 
-## 5. 고려 사항 (Key Considerations)
+## 6. 고려 사항 (Key Considerations)
 
 - **Multi-Project Isolation**: Docker 프로젝트 이름 명시 (이름 충돌 방지).
 - **Scalability**: 데이터 증가에 따른 인덱싱 및 페이지네이션 전략 수립.
@@ -108,4 +135,8 @@
 
 ---
 작성일: 2026-03-18 (Phase 7 보안 강화 추가 및 구조 정제)
+작성자: Antigravity Assistant
+
+---
+작성일: 2026-03-19 (AI 파이프라인 협의 결과 반영 - 입력 방식 및 어드민 권한 추가)
 작성자: Antigravity Assistant

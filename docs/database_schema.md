@@ -43,6 +43,8 @@ erDiagram
         string email UK
         string hashed_password
         string nickname
+        enum role
+        boolean is_active
         datetime created_at
     }
     UserProfiles {
@@ -55,6 +57,7 @@ erDiagram
         uuid user_id FK
         string title
         text content
+        boolean is_active
     }
     Concepts {
         bigint id PK
@@ -74,6 +77,7 @@ erDiagram
         uuid lecture_id FK
         uuid user_id FK
         string title
+        boolean is_active
     }
     QuizQuestions {
         bigint id PK
@@ -98,6 +102,7 @@ erDiagram
 | `email` | String (Unique) | 로그인 계정 |
 | `hashed_password` | String | 암호화된 비밀번호 |
 | `nickname` | String | 사용자 별명 |
+| `role` | Enum | 계정 권한 (USER, ADMIN) |
 | `is_active` | Boolean | 계정 활성 상태 |
 | `created_at` | DateTime | 가입 일시 |
  
@@ -116,6 +121,7 @@ erDiagram
 | `user_id` | UUID (FK) | 업로드한 사용자 |
 | `title` | String | 강의 제목 |
 | `content` | Text | 전체 스크립트 텍스트 |
+| `is_active` | Boolean | 활성 상태 (Soft Delete 여부) |
 | `vector_embedding` | Vector | (pgvector 도입 시) 검색용 임베딩 값 |
  
 ### 2.4 Concepts & Mastery (개념 학습 도표)
@@ -136,8 +142,13 @@ erDiagram
 | `progress` | Integer | 진행률 (0~100) |
 | `result_url` | String | 완료 후 결과물 접근 주소 |
  
-### 2.6 Quizzes & Questions (학습 콘텐츠)
-- 기존 기획된 퀴즈 원본 및 문항 데이터 (강의 및 개념 데이터와 외래키 연결)
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | 퀴즈 식별자 |
+| `lecture_id` | UUID (FK) | 소속 강의 |
+| `user_id` | UUID (FK) | 생성한 사용자 |
+| `title` | String | 퀴즈 제목 |
+| `is_active` | Boolean | 활성 상태 (Soft Delete 여부) |
  
 ### 2.7 QuizResults (학습 및 수행 결과)
 | Field | Type | Description |
