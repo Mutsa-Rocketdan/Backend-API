@@ -34,10 +34,10 @@
 ## 🛠 주요 기능
 
 - **사용자 인증 (Auth)**: JWT 토큰 기반의 회원가입 및 로그인 시스템
-- **강의 관리 (Lecture)**: 강의 자료 업로드 및 목록 상세 조회 (Soft Delete 적용)
-- **권한 관리 (RBAC)**: 관리자(ADMIN)와 일반유저(USER) 역할 분리 및 접근 제어
-- **AI 작업 트래킹 (Task)**: 비동기 방식의 지식 추출 작업 진행 상태 추적 (Progress % 지원)
-- **비동기 가드**: 강의 업로드, 퀴즈 생성, 강의 삭제 등 핵심 기능은 관리자만 수행 가능
+- **강의 관리 (Lecture)**: 강의 상세 정보(주차, 강사, 날짜 등) 관리 및 소프트 삭제 적용
+- **학습 가이드 생성 (Study Guide)**: AI를 통한 강의 요약, 핵심 정리, 체크리스트, 개념 맵 자동 생성
+- **권한 관리 (RBAC)**: 관리자(ADMIN)와 일반유저(USER) 역할 분리 및 접근 제어로 데이터 보호
+- **AI 작업 트래킹 (Task)**: 비동기 방식의 지식 추출 및 가이드 생성 작업 진행 상태 추적 (Progress % 지원)
 
 ---
 
@@ -56,6 +56,7 @@ erDiagram
     
     Lectures ||--o{ Concepts : "지식 추출"
     Lectures ||--o{ Quizzes : "퀴즈 생성"
+    Lectures ||--o| Guides : "학습 가이드"
     
     Quizzes ||--o{ QuizQuestions : "문항 포함"
     Quizzes ||--o{ QuizResults : "결과 기록"
@@ -67,7 +68,8 @@ erDiagram
 - **Concepts**: 강의에서 AI가 추출한 핵심 지식 단위 및 숙련도(Mastery) 정보
 - **Quizzes & Questions**: 생성된 퀴즈 한 묶음과 객관식 문항 데이터 (비활성 시 조회 차단)
 - **QuizResults**: 사용자가 제출한 답안, 점수 및 AI 맞춤 피드백 (강의 삭제 후에도 기록 유지)
-- **AITasks**: 비동기로 진행되는 AI 연산의 실시간 상태(Progress %)
+- **Guides**: 강의 자료를 바탕으로 생성된 요약, 핵심 정리, 체크리스트 및 개념 맵 데이터
+- **AITasks**: 비동기로 진행되는 AI 연산의 실시간 상태(Progress %) 및 결과 추적
 
 ---
 

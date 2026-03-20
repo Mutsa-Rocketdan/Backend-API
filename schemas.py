@@ -1,7 +1,8 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, date as py_date
+
 from models import LearningLevel, TaskStatus, UserRole
 
 # --- User Schemas ---
@@ -59,6 +60,11 @@ class AITaskResponse(AITaskBase):
 class LectureBase(BaseModel):
     title: str
     content: str
+    week: Optional[int] = None
+    subject: Optional[str] = None
+    instructor: Optional[str] = None
+    session: Optional[str] = None
+    date: Optional[py_date] = None
     is_active: bool = True
 
 class LectureCreate(LectureBase):
@@ -131,6 +137,24 @@ class QuizResultResponse(QuizResultCreate):
     id: int
     user_id: UUID
     quiz_id: UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# --- Study Guide Schemas ---
+class GuideBase(BaseModel):
+    summary: str
+    key_summaries: List[str]
+    review_checklist: List[str]
+    concept_map: dict
+
+class GuideCreate(GuideBase):
+    lecture_id: UUID
+
+class GuideResponse(GuideBase):
+    id: UUID
+    lecture_id: UUID
     created_at: datetime
 
     class Config:

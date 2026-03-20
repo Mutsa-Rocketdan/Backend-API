@@ -114,6 +114,32 @@ def run_quiz_generation(quiz_id: uuid.UUID, lecture_content: str, task_id: uuid.
         print(f"Error in Quiz generation task {task_id}: {str(e)}")
         db.commit()
 
+def run_guide_generation(lecture_id: uuid.UUID, content: str, task_id: uuid.UUID, db: Session):
+    """AI를 사용하여 학습 가이드를 생성하는 프로세스 시뮬레이터입니다."""
+    try:
+        update_task_status(db, task_id, status=models.TaskStatus.PROCESSING, progress=20)
+        time.sleep(1)
+
+        update_task_status(db, task_id, progress=60)
+        time.sleep(1)
+
+        # 실제로는 여기서 LLM API 호출 후 파싱
+        mock_guide = models.Guide(
+            lecture_id=lecture_id,
+            summary="이 강의는 파이썬 입문에 대한 내용을 담고 있습니다.",
+            key_summaries=["변수와 자료형", "조건문과 반복문", "함수 정의"],
+            review_checklist=["변수 이름을 짓는 규칙을 설명할 수 있는가?", "for문과 while문의 차이를 아는가?"],
+            concept_map={"nodes": ["Python", "Syntax"], "edges": [{"from": "Python", "to": "Syntax"}]}
+        )
+        db.add(mock_guide)
+        
+        update_task_status(db, task_id, status=models.TaskStatus.COMPLETED, progress=100)
+        db.commit()
+    except Exception as e:
+        update_task_status(db, task_id, status=models.TaskStatus.FAILED, progress=0)
+        print(f"Error in Guide generation: {str(e)}")
+        db.commit()
+
 def update_task_status(db: Session, task_id: uuid.UUID, status: models.TaskStatus = None, progress: int = None):
     """DB의 AITask 상태를 실시간으로 업데이트합니다."""
     task = db.query(models.AITask).filter(models.AITask.task_id == task_id).first()

@@ -34,6 +34,7 @@ erDiagram
     
     Lectures ||--o{ Concepts : "extracted into"
     Lectures ||--o{ Quizzes : "base for"
+    Lectures ||--o| Guides : "summarized into"
     
     Quizzes ||--o{ QuizQuestions : "contains"
     Quizzes ||--o{ QuizResults : "evaluated by"
@@ -57,6 +58,11 @@ erDiagram
         uuid user_id FK
         string title
         text content
+        int week
+        string subject
+        string instructor
+        string session
+        date date
         boolean is_active
     }
     Concepts {
@@ -92,6 +98,15 @@ erDiagram
         int score
         jsonb user_answers
     }
+    Guides {
+        uuid id PK
+        uuid lecture_id FK
+        text summary
+        jsonb key_summaries
+        jsonb review_checklist
+        jsonb concept_map
+        datetime created_at
+    }
 ```
  
 ### 2.1 Users (사용자 계정)
@@ -122,6 +137,11 @@ erDiagram
 | `title` | String | 강의 제목 |
 | `content` | Text | 전체 스크립트 텍스트 |
 | `is_active` | Boolean | 활성 상태 (Soft Delete 여부) |
+| `week` | Integer | 강의 주차 (예: 1, 2, 3...) |
+| `subject` | String | 과목명 (예: '알고리즘 입문') |
+| `instructor` | String | 강사명 |
+| `session` | String | 교시 또는 세션 정보 |
+| `date` | Date | 강의 진행 날짜 |
 | `vector_embedding` | Vector | (pgvector 도입 시) 검색용 임베딩 값 |
  
 ### 2.4 Concepts & Mastery (개념 학습 도표)
@@ -160,3 +180,14 @@ erDiagram
 | `user_answers` | JSONB | 사용자가 제출한 답안 리스트 |
 | `ai_feedback` | Text | 개인화 학습 가이드 |
 | `created_at` | DateTime | 수행 완료 일시 |
+ 
+### 2.8 Study Guides (학습 가이드)
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | 가이드 식별자 |
+| `lecture_id` | UUID (FK) | 소속 강의 |
+| `summary` | Text | 강의 전체 요약 |
+| `key_summaries` | JSONB | 핵심 요점 리스트 |
+| `review_checklist` | JSONB | 복습 체크리스트 (To-do) |
+| `concept_map` | JSONB | 개념 간 관계 데이터 |
+| `created_at` | DateTime | 생성 일시 |

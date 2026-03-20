@@ -191,13 +191,19 @@ async def create_lecture(
     new_lecture = models.Lecture(
         user_id=current_admin.id,
         title=lecture.title,
-        content=lecture.content
+        content=lecture.content,
+        week=lecture.week,
+        subject=lecture.subject,
+        instructor=lecture.instructor,
+        session=lecture.session,
+        date=lecture.date
     )
     db.add(new_lecture)
     db.flush() # ID를 미리 얻기 위해
     
     # 2. 작업(AITask) 생성
     new_task = models.AITask(
+        user_id=current_admin.id,
         type="concept_extraction",
         status=models.TaskStatus.PENDING,
         progress=0
@@ -362,3 +368,47 @@ def submit_quiz_result(
 def get_my_quiz_results(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """내가 수행한 모든 퀴즈 결과 내역을 가져옵니다."""
     return db.query(models.QuizResult).filter(models.QuizResult.user_id == current_user.id).all()
+
+# --- Phase 6: Study Guide APIs ---
+
+@app.post("/lectures/{lecture_id}/guides", response_model=schemas.AITaskResponse)
+async def create_study_guide(
+    lecture_id: UUID, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    """(관리자 전용) 특정 강의를 바탕으로 학습 가이드(요약, 체크리스트 등) 생성을 시작합니다."""
+    lecture = db.query(models.Lecture).filter(models.Lecture.id == lecture_id).first()
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+    
+    # 작업 생성
+    new_task = models.AITask(
+        user_id=current_admin.id,
+        type="guide_generation",
+        status=models.TaskStatus.PENDING,
+        progress=0
+    )
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
+
+    # 비동기 작업 시작
+    background_tasks.add_task(
+        ai_service.run_guide_generation,
+        lecture_id,
+        lecture.content,
+        new_task.task_id,
+        SessionLocal()
+    )
+
+    return new_task
+
+@app.get("/lectures/{lecture_id}/guides", response_model=schemas.GuideResponse)
+def get_study_guide(lecture_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """특정 강의에 대한 학습 가이드를 조회합니다."""
+    guide = db.query(models.Guide).filter(models.Guide.lecture_id == lecture_id).first()
+    if not guide:
+        raise HTTPException(status_code=404, detail="Study guide not found for this lecture")
+    return guide

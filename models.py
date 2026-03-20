@@ -1,6 +1,6 @@
 import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Integer, Float, JSON, Enum as SQLEnum, BigInteger
+from datetime import datetime, date as date_obj
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Integer, Float, JSON, Enum as SQLEnum, BigInteger, Date
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 import enum
@@ -56,6 +56,14 @@ class Lecture(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     title = Column(String, index=True)
     content = Column(Text)
+    
+    # 신규 메타데이터 필드 추가
+    week = Column(Integer, nullable=True)     # 주차 (예: 1, 2, 3...)
+    subject = Column(String, nullable=True)  # 과목명
+    instructor = Column(String, nullable=True) # 강사명
+    session = Column(String, nullable=True)    # 교시/세션
+    date = Column(Date, nullable=True)         # 강의 날짜
+
     # pgvector 도입 전까지는 JSONB에 임베딩 저장 가능
     vector_embedding = Column(JSONB, nullable=True)
     is_active = Column(Boolean, default=True)
@@ -64,6 +72,7 @@ class Lecture(Base):
     user = relationship("User", back_populates="lectures")
     concepts = relationship("Concept", back_populates="lecture")
     quizzes = relationship("Quiz", back_populates="lecture")
+    guide = relationship("Guide", back_populates="lecture", uselist=False)
 
 class Concept(Base):
     __tablename__ = "concepts"
@@ -128,3 +137,16 @@ class QuizResult(Base):
 
     user = relationship("User", back_populates="quiz_results")
     quiz = relationship("Quiz", back_populates="results")
+
+class Guide(Base):
+    __tablename__ = "guides"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lecture_id = Column(UUID(as_uuid=True), ForeignKey("lectures.id"), unique=True)
+    summary = Column(Text)
+    key_summaries = Column(JSONB)     # 핵심 요약 리스트
+    review_checklist = Column(JSONB)  # 체크리스트 리스트
+    concept_map = Column(JSONB)       # 개념 맵 데이터 (노드/엣지 등)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    lecture = relationship("Lecture", back_populates="guide")
