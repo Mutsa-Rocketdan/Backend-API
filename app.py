@@ -38,8 +38,8 @@ if SENTRY_DSN:
 # --- Phase 7: Rate Limiting Setup ---
 limiter = Limiter(key_func=get_remote_address)
 
-# DB 테이블 생성 (Alembic을 썼지만, 혹시 모를 상황 대비)
-models.Base.metadata.create_all(bind=engine)
+# --- Phase 9: Database initialization managed by Alembic ---
+# models.Base.metadata.create_all(bind=engine)
 
 # Swagger/ReDoc을 커스텀 보호하기 위해 기본값은 비활성화
 app = FastAPI(
@@ -121,7 +121,7 @@ async def get_current_admin(current_user: models.User = Depends(get_current_user
 @app.get("/")
 @limiter.limit("5/minute")
 async def root(request: auth.Request): # slowapi requires 'request' argument
-    return {"message": "AI Quiz & Guide Backend is running", "version": "1.0.1"}
+    return {"message": "AI Quiz & Guide Backend is running", "version": "v1.1.0 (v2 build)"}
 
 # --- Protected Docs Endpoints ---
 @app.get("/docs", include_in_schema=False)
@@ -204,6 +204,7 @@ async def create_lecture(
     # 2. 작업(AITask) 생성
     new_task = models.AITask(
         user_id=current_admin.id,
+        lecture_id=new_lecture.id, # 핵심: 강의와 작업을 명확히 연결
         type="concept_extraction",
         status=models.TaskStatus.PENDING,
         progress=0
@@ -305,6 +306,8 @@ def create_quiz(
     # 2. 비동기 작업 생성
     new_task = models.AITask(
         user_id=current_admin.id,
+        lecture_id=lecture_id,  # 퀴즈의 원천 강의와 연결
+        quiz_id=new_quiz.id,     # 생성될 퀴즈와도 연결
         type="quiz_generation",
         status=models.TaskStatus.PENDING,
         progress=0
@@ -386,6 +389,7 @@ async def create_study_guide(
     # 작업 생성
     new_task = models.AITask(
         user_id=current_admin.id,
+        lecture_id=lecture_id, # 강의와 연결
         type="guide_generation",
         status=models.TaskStatus.PENDING,
         progress=0

@@ -90,6 +90,9 @@ class AITask(Base):
 
     task_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    lecture_id = Column(UUID(as_uuid=True), ForeignKey("lectures.id"), nullable=True)
+    quiz_id = Column(UUID(as_uuid=True), ForeignKey("quizzes.id"), nullable=True)
+    
     type = Column(String)  # quiz_generation, guide_generation, etc.
     status = Column(SQLEnum(TaskStatus), default=TaskStatus.PENDING)
     progress = Column(Integer, default=0)
@@ -97,6 +100,8 @@ class AITask(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="tasks")
+    lecture = relationship("Lecture", backref="associated_tasks")
+    quiz = relationship("Quiz", backref="associated_tasks")
 
 class Quiz(Base):
     __tablename__ = "quizzes"

@@ -50,6 +50,8 @@ class AITaskResponse(AITaskBase):
     task_id: UUID
     status: TaskStatus
     progress: int
+    lecture_id: Optional[UUID] = None
+    quiz_id: Optional[UUID] = None
     result_url: Optional[str] = None
     created_at: datetime
 

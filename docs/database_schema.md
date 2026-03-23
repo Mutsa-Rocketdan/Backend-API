@@ -32,6 +32,9 @@ erDiagram
     Users ||--o{ AITasks : "triggers"
     Users ||--o{ QuizResults : "performs"
     
+    AITasks }o--|| Lectures : "belongs to"
+    AITasks }o--|| Quizzes : "belongs to"
+    
     Lectures ||--o{ Concepts : "extracted into"
     Lectures ||--o{ Quizzes : "base for"
     Lectures ||--o| Guides : "summarized into"
@@ -74,6 +77,8 @@ erDiagram
     AITasks {
         uuid task_id PK
         uuid user_id FK
+        uuid lecture_id FK
+        uuid quiz_id FK
         string type
         enum status
         int progress
@@ -157,6 +162,9 @@ erDiagram
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `task_id` | UUID (PK) | 작업 식별자 |
+| `user_id` | UUID (FK) | 요청 사용자 |
+| `lecture_id` | UUID (FK) | 연관 강의 (Optional) |
+| `quiz_id` | UUID (FK) | 연관 퀴즈 (Optional) |
 | `type` | String | 퀴즈 생성 / 가이드 생성 등 |
 | `status` | Enum | PENDING, PROCESSING, COMPLETED, FAILED |
 | `progress` | Integer | 진행률 (0~100) |
