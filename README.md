@@ -58,6 +58,9 @@ erDiagram
     Lectures ||--o{ Quizzes : "퀴즈 생성"
     Lectures ||--o| Guides : "학습 가이드"
     
+    AITasks }o--o| Lectures : "대상 강의 연결"
+    AITasks }o--o| Quizzes : "대상 퀴즈 연결"
+    
     Quizzes ||--o{ QuizQuestions : "문항 포함"
     Quizzes ||--o{ QuizResults : "결과 기록"
 ```
@@ -69,7 +72,7 @@ erDiagram
 - **Quizzes & Questions**: 생성된 퀴즈 한 묶음과 객관식 문항 데이터 (비활성 시 조회 차단)
 - **QuizResults**: 사용자가 제출한 답안, 점수 및 AI 맞춤 피드백 (강의 삭제 후에도 기록 유지)
 - **Guides**: 강의 자료를 바탕으로 생성된 요약, 핵심 정리, 체크리스트 및 개념 맵 데이터
-- **AITasks**: 비동기로 진행되는 AI 연산의 실시간 상태(Progress %) 및 결과 추적
+- **AITasks**: 비동기로 진행되는 AI 연산의 실시간 상태(Progress %) 및 결과(Lecture/Quiz ID) 추적
 
 ---
 
