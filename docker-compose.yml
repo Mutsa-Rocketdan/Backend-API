@@ -18,10 +18,12 @@ services:
     restart: always
     ports:
       - "${API_EXTERNAL_PORT}:8000"
+    env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     volumes:
       - .:/app
+      - ../AI-Pipeline:/AI-Pipeline
     depends_on:
       - db
 

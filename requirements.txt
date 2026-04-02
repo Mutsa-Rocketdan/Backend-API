@@ -16,3 +16,4 @@ alembic
 sentry-sdk[fastapi]
 prometheus-fastapi-instrumentator
 slowapi
+faiss-cpu

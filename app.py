@@ -1,13 +1,13 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 import os
 from dotenv import load_dotenv
 
 import models, schemas, auth
-from database import engine, SessionLocal, get_db
+from database import SessionLocal, get_db
 
 import sentry_sdk
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -22,18 +22,26 @@ import secrets
 load_dotenv()
 
 # --- Phase 6: Sentry Monitoring ---
-SENTRY_DSN = os.getenv("SENTRY_DSN")
-if SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        # Set traces_sample_rate to 1.0 to capture 100%
-        # of transactions for performance monitoring.
-        traces_sample_rate=1.0,
-        # Set profiles_sample_rate to 1.0 to profile 100%
-        # of sampled transactions.
-        # We recommend adjusting this value in production.
-        profiles_sample_rate=1.0,
-    )
+SENTRY_DSN = (os.getenv("SENTRY_DSN") or "").strip()
+_SENTRY_DSN_IS_PLACEHOLDER = SENTRY_DSN.lower() in {"your_sentry_dsn_here", "none", "null"}
+_SENTRY_DSN_HAS_VALID_SCHEME = SENTRY_DSN.startswith("http://") or SENTRY_DSN.startswith("https://")
+
+# DSN이 없거나 placeholder/형식이 잘못되면 Sentry 초기화를 건너뛰어 앱 부팅 크래시를 방지한다.
+if SENTRY_DSN and (not _SENTRY_DSN_IS_PLACEHOLDER) and _SENTRY_DSN_HAS_VALID_SCHEME:
+    try:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            # Set traces_sample_rate to 1.0 to capture 100%
+            # of transactions for performance monitoring.
+            traces_sample_rate=1.0,
+            # Set profiles_sample_rate to 1.0 to profile 100%
+            # of sampled transactions.
+            # We recommend adjusting this value in production.
+            profiles_sample_rate=1.0,
+        )
+    except Exception:
+        # Sentry 설정 오류로 서버가 죽지 않도록 방어적으로 스킵한다.
+        pass
 
 # --- Phase 7: Rate Limiting Setup ---
 limiter = Limiter(key_func=get_remote_address)
@@ -196,7 +204,9 @@ async def create_lecture(
         subject=lecture.subject,
         instructor=lecture.instructor,
         session=lecture.session,
-        date=lecture.date
+        date=lecture.date,
+        learning_goal=lecture.learning_goal,
+        has_code_quiz=lecture.has_code_quiz,
     )
     db.add(new_lecture)
     db.flush() # ID를 미리 얻기 위해
@@ -225,8 +235,26 @@ async def create_lecture(
         new_task.task_id,
         SessionLocal()
     )
+
+    # 5. 학습 가이드도 자동 생성
+    guide_task = models.AITask(
+        user_id=current_admin.id,
+        lecture_id=new_lecture.id,
+        type="guide_generation",
+        status=models.TaskStatus.PENDING,
+        progress=0,
+    )
+    db.add(guide_task)
+    db.commit()
+    db.refresh(guide_task)
+    background_tasks.add_task(
+        ai_service.run_guide_generation,
+        new_lecture.id,
+        new_lecture.content,
+        guide_task.task_id,
+        SessionLocal(),
+    )
     
-    # 응답 헤더에 작업 ID를 추가하여 앱이 추적할 수 있게 함
     return new_lecture
 
 @app.get("/tasks/{task_id}", response_model=schemas.AITaskResponse)
@@ -243,6 +271,21 @@ def get_lectures(db: Session = Depends(get_db), current_user: models.User = Depe
     return db.query(models.Lecture).filter(
         models.Lecture.is_active == True # 활성 상태인 것만 조회
     ).all()
+
+@app.get("/lectures/{lecture_id}", response_model=schemas.LectureResponse)
+def get_lecture_by_id(
+    lecture_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """특정 강의 상세를 조회합니다."""
+    lecture = db.query(models.Lecture).filter(
+        models.Lecture.id == lecture_id,
+        models.Lecture.is_active == True,
+    ).first()
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+    return lecture
 
 @app.delete("/lectures/{lecture_id}")
 def delete_lecture(
@@ -282,19 +325,28 @@ def get_lecture_concepts(
 def create_quiz(
     lecture_id: UUID,
     background_tasks: BackgroundTasks,
+    options: Optional[schemas.QuizCreateOptions] = None,
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
     """(관리자 전용) 특정 강의를 바탕으로 AI 퀴즈 생성을 시작합니다."""
     lecture = db.query(models.Lecture).filter(
         models.Lecture.id == lecture_id, 
-        models.Lecture.is_active == True # 활성 상태인 강의에 대해서만 퀴즈 생성 가능
+        models.Lecture.is_active == True
     ).first()
     
     if not lecture:
         raise HTTPException(status_code=404, detail="Lecture not found")
 
-    # 1. 퀴즈 객체 생성
+    opts = options or schemas.QuizCreateOptions()
+    quiz_types = opts.quiz_types or []
+    if quiz_types:
+        # lecture.has_code_quiz 가 false면 code 선택을 제거
+        if not lecture.has_code_quiz:
+            quiz_types = [t for t in quiz_types if t != "code"]
+        if not quiz_types:
+            quiz_types = ["multiple_choice"]
+
     new_quiz = models.Quiz(
         lecture_id=lecture_id,
         user_id=current_admin.id,
@@ -303,11 +355,10 @@ def create_quiz(
     db.add(new_quiz)
     db.flush()
 
-    # 2. 비동기 작업 생성
     new_task = models.AITask(
         user_id=current_admin.id,
-        lecture_id=lecture_id,  # 퀴즈의 원천 강의와 연결
-        quiz_id=new_quiz.id,     # 생성될 퀴즈와도 연결
+        lecture_id=lecture_id,
+        quiz_id=new_quiz.id,
         type="quiz_generation",
         status=models.TaskStatus.PENDING,
         progress=0
@@ -318,13 +369,17 @@ def create_quiz(
     
     new_quiz.task_id = new_task.task_id
 
-    # 3. 비동기 퀴즈 생성 작업 시작
     background_tasks.add_task(
         ai_service.run_quiz_generation,
         new_quiz.id,
+        lecture_id,
         lecture.content,
         new_task.task_id,
-        SessionLocal()
+        SessionLocal(),
+        quiz_type=opts.quiz_type,
+        quiz_types=quiz_types or None,
+        difficulty=opts.difficulty,
+        count=opts.count,
     )
 
     return new_quiz
@@ -365,6 +420,60 @@ def submit_quiz_result(
     db.add(new_result)
     db.commit()
     db.refresh(new_result)
+
+    # 퀴즈 결과에 따라 해당 강의의 이해도(Concept.mastery_score)를 업데이트
+    try:
+        lecture_id = quiz.lecture_id
+        concepts = db.query(models.Concept).filter(models.Concept.lecture_id == lecture_id).all()
+        questions = db.query(models.QuizQuestion).filter(models.QuizQuestion.quiz_id == quiz_id).order_by(models.QuizQuestion.id.asc()).all()
+
+        def _norm(s: str) -> str:
+            return (s or "").strip().casefold()
+
+        # 개념별로 "해당 개념과 관련된 문항"을 문자열 매칭으로 추정
+        # - concept_name이 question_text 또는 explanation에 포함되면 해당 개념 문항으로 간주
+        stats: dict[int, dict[str, int]] = {c.id: {"seen": 0, "correct": 0} for c in concepts}
+        for i, q in enumerate(questions):
+            ua = result.user_answers[i] if i < len(result.user_answers) else ""
+            ca = q.correct_answer or ""
+            qtype = (q.quiz_type or ("multiple_choice" if (q.options and len(q.options) > 0) else "short_answer")).strip()
+
+            if qtype in {"short_answer", "fill_blank", "code"}:
+                is_correct = _norm(ua) == _norm(ca)
+            else:
+                # multiple_choice
+                is_correct = (ua or "").strip() == ca.strip()
+
+            hay = f"{q.question_text or ''}\n{q.explanation or ''}"
+            matched_any = False
+            for c in concepts:
+                name = (c.concept_name or "").strip()
+                if name and name in hay:
+                    stats[c.id]["seen"] += 1
+                    stats[c.id]["correct"] += 1 if is_correct else 0
+                    matched_any = True
+
+            # 어떤 개념에도 매칭되지 않으면 전체에 영향 주지 않음(균등 업데이트 방지)
+            if not matched_any:
+                continue
+
+        # 개념별 업데이트: 해당 개념 문항의 정확도를 EMA로 반영
+        alpha = 0.35
+        for c in concepts:
+            seen = stats[c.id]["seen"]
+            if seen <= 0:
+                continue
+            acc = stats[c.id]["correct"] / seen  # 0~1
+            old = float(c.mastery_score or 0.0)
+            new = (1.0 - alpha) * old + alpha * float(acc)
+            c.mastery_score = max(0.0, min(1.0, new))
+        db.commit()
+    except Exception:
+        # 이해도 업데이트 실패가 결과 저장을 막지 않도록 방어
+        try:
+            db.rollback()
+        except Exception:
+            pass
     return new_result
 
 @app.get("/quiz-results", response_model=List[schemas.QuizResultResponse])
@@ -379,17 +488,20 @@ async def create_study_guide(
     lecture_id: UUID, 
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_user: models.User = Depends(get_current_user)
 ):
-    """(관리자 전용) 특정 강의를 바탕으로 학습 가이드(요약, 체크리스트 등) 생성을 시작합니다."""
+    """특정 강의를 바탕으로 학습 가이드(요약, 체크리스트 등) 생성을 시작합니다."""
     lecture = db.query(models.Lecture).filter(models.Lecture.id == lecture_id).first()
     if not lecture:
         raise HTTPException(status_code=404, detail="Lecture not found")
-    
-    # 작업 생성
+
+    existing = db.query(models.Guide).filter(models.Guide.lecture_id == lecture_id).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Guide already exists for this lecture")
+
     new_task = models.AITask(
-        user_id=current_admin.id,
-        lecture_id=lecture_id, # 강의와 연결
+        user_id=current_user.id,
+        lecture_id=lecture_id,
         type="guide_generation",
         status=models.TaskStatus.PENDING,
         progress=0
@@ -398,7 +510,6 @@ async def create_study_guide(
     db.commit()
     db.refresh(new_task)
 
-    # 비동기 작업 시작
     background_tasks.add_task(
         ai_service.run_guide_generation,
         lecture_id,

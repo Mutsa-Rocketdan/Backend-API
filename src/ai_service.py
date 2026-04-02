@@ -1,146 +1,68 @@
+"""AI-Pipeline 호출 래퍼 — 인제스트(전역 벡터DB) + RAG 기반 생성.
+
+강의 업로드 시 본문을 ``ingest_lecture_upload``로 FAISS에 반영한 뒤,
+개념·퀴즈·가이드 생성은 ``lecture_id``로 RAG 검색한 컨텍스트를 사용합니다.
+AI-Pipeline을 import할 수 없는 환경에서는 기존 모의(mock) 데이터로 폴백합니다.
+"""
+
+import sys
 import time
 import uuid
+import traceback
+from pathlib import Path
+
 from sqlalchemy.orm import Session
+
 import models
-from datetime import datetime
 
-# --- AI 하이퍼파라미터 및 설정 ---
-# 나중에 이 값들만 수정하여 AI의 행동을 조절할 수 있습니다.
-AI_CONFIG = {
-    "model_name": "gpt-4o",        # 사용할 모델명
-    "temperature": 0.7,            # 창의성 조절 (0.0 ~ 1.0)
-    "max_tokens": 1000,            # 응답 최대 길이
-    "chunk_size": 600,             # 텍스트를 자르는 단위 (토큰 기준)
-    "chunk_overlap": 100,          # 자를 때 겹치는 부분의 크기
-}
+# ---------------------------------------------------------------------------
+# AI-Pipeline import 시도
+# Backend 와 AI-Pipeline 모두 `src` 패키지를 사용하므로 충돌을 피하기 위해
+# importlib 로 AI-Pipeline/src 를 `ai_pipeline` 이라는 별도 패키지로 등록합니다.
+# 내부 상대 import(from .common …) 가 ai_pipeline.common 으로 올바르게 해석됩니다.
+# ---------------------------------------------------------------------------
+_AI_PIPELINE_ROOT = Path(__file__).resolve().parent.parent.parent / "AI-Pipeline"
+_AI_AVAILABLE = False
 
-def run_concept_extraction(lecture_id: str, content: str, task_id: uuid.UUID, db: Session):
-    """
-    강의 자료에서 지식을 추출하는 AI 프로세스 시뮬레이터입니다.
-    이 함수 내부의 주석 부분을 실제 AI 로직으로 갈아끼우면 됩니다.
-    """
-    try:
-        # [단계 1] 작업 시작 알림 (Progress: 10%)
-        update_task_status(db, task_id, status=models.TaskStatus.PROCESSING, progress=10)
-        time.sleep(1) # AI 처리를 기다리는 척 (실제 요청 시 삭제)
+try:
+    import importlib.util
 
-        # [단계 2] 텍스트 전처리 및 청킹
-        # TODO: src/preprocessing.py의 chunk_text() 함수 등을 여기서 호출하세요.
-        # chunks = preprocessing.chunk_text(content, max_tokens=AI_CONFIG["chunk_size"])
-        update_task_status(db, task_id, progress=30)
-        time.sleep(1)
-
-        # [단계 3] AI 모델 호출 (개념 추출)
-        # TODO: 아래는 가짜 데이터입니다. 실제로는 openai API 등을 호출하여 결과물(JSON 등)을 받으세요.
-        # response = openai.ChatCompletion.create(model=AI_CONFIG["model_name"], messages=...)
-        # mock_data = response.choices[0].message.content
-        update_task_status(db, task_id, progress=70)
-        time.sleep(1)
-
-        # [단계 4] 추출된 데이터를 DB에 저장
-        mock_concepts = [
-            {"name": f"핵심 개념 (AI 모델: {AI_CONFIG['model_name']})", "desc": "강의에서 추출된 첫 번째 지식입니다."},
-            {"name": "세부 주제 X", "desc": "강의의 중간 부분에서 언급된 중요한 포인트입니다."}
-        ]
-        
-        for c in mock_concepts:
-            new_concept = models.Concept(
-                lecture_id=lecture_id,
-                concept_name=c["name"],
-                description=c["desc"],
-                mastery_score=0.0
-            )
-            db.add(new_concept)
-        
-        # [단계 5] 모든 작업 완료
-        update_task_status(db, task_id, status=models.TaskStatus.COMPLETED, progress=100)
-        db.commit()
-
-    except Exception as e:
-        # 에러 발생 시 상태 기록
-        update_task_status(db, task_id, status=models.TaskStatus.FAILED, progress=0)
-        print(f"Error in AI task {task_id}: {str(e)}")
-        db.commit()
-
-def run_quiz_generation(quiz_id: uuid.UUID, lecture_content: str, task_id: uuid.UUID, db: Session):
-    """
-    AI를 사용하여 퀴즈 문항을 생성하는 프로세스 시뮬레이터입니다.
-    """
-    try:
-        update_task_status(db, task_id, status=models.TaskStatus.PROCESSING, progress=10)
-        time.sleep(1)
-
-        # [단계 2] 강의 내용 분석 및 문제 초안 작성
-        update_task_status(db, task_id, progress=40)
-        time.sleep(1)
-
-        # [단계 3] AI 모델 호출 (퀴즈 문항 생성)
-        # TODO: 실제 AI 프롬프트를 사용하여 객관식 문제를 생성하세요.
-        update_task_status(db, task_id, progress=80)
-        time.sleep(1)
-
-        # [단계 4] 생성된 문항 저장
-        mock_questions = [
-            {
-                "text": "파이썬에서 리스트의 길이를 구하는 함수는?",
-                "options": ["size()", "length()", "len()", "count()"],
-                "answer": "len()",
-                "explanation": "len() 함수는 파이썬 내장 함수로 시퀀스의 길이를 반환합니다."
-            },
-            {
-                "text": "다음 중 파이썬의 데이터 타입이 아닌 것은?",
-                "options": ["int", "float", "double", "str"],
-                "answer": "double",
-                "explanation": "파이썬에서는 소수점을 float으로 처리하며 double은 별도로 존재하지 않습니다."
-            }
-        ]
-
-        for q in mock_questions:
-            new_question = models.QuizQuestion(
-                quiz_id=quiz_id,
-                question_text=q["text"],
-                options=q["options"],
-                correct_answer=q["answer"],
-                explanation=q["explanation"]
-            )
-            db.add(new_question)
-
-        # [단계 5] 완료
-        update_task_status(db, task_id, status=models.TaskStatus.COMPLETED, progress=100)
-        db.commit()
-
-    except Exception as e:
-        update_task_status(db, task_id, status=models.TaskStatus.FAILED, progress=0)
-        print(f"Error in Quiz generation task {task_id}: {str(e)}")
-        db.commit()
-
-def run_guide_generation(lecture_id: uuid.UUID, content: str, task_id: uuid.UUID, db: Session):
-    """AI를 사용하여 학습 가이드를 생성하는 프로세스 시뮬레이터입니다."""
-    try:
-        update_task_status(db, task_id, status=models.TaskStatus.PROCESSING, progress=20)
-        time.sleep(1)
-
-        update_task_status(db, task_id, progress=60)
-        time.sleep(1)
-
-        # 실제로는 여기서 LLM API 호출 후 파싱
-        mock_guide = models.Guide(
-            lecture_id=lecture_id,
-            summary="이 강의는 파이썬 입문에 대한 내용을 담고 있습니다.",
-            key_summaries=["변수와 자료형", "조건문과 반복문", "함수 정의"],
-            review_checklist=["변수 이름을 짓는 규칙을 설명할 수 있는가?", "for문과 while문의 차이를 아는가?"],
-            concept_map={"nodes": ["Python", "Syntax"], "edges": [{"from": "Python", "to": "Syntax"}]}
+    _ai_src = _AI_PIPELINE_ROOT / "src"
+    if _ai_src.is_dir():
+        _pkg_spec = importlib.util.spec_from_file_location(
+            "ai_pipeline",
+            str(_ai_src / "__init__.py"),
+            submodule_search_locations=[str(_ai_src)],
         )
-        db.add(mock_guide)
-        
-        update_task_status(db, task_id, status=models.TaskStatus.COMPLETED, progress=100)
-        db.commit()
-    except Exception as e:
-        update_task_status(db, task_id, status=models.TaskStatus.FAILED, progress=0)
-        print(f"Error in Guide generation: {str(e)}")
-        db.commit()
+        if _pkg_spec is None or _pkg_spec.loader is None:
+            raise ImportError("Failed to create module spec for AI-Pipeline package")
+        _pkg = importlib.util.module_from_spec(_pkg_spec)
+        sys.modules["ai_pipeline"] = _pkg
+        _pkg_spec.loader.exec_module(_pkg)
 
-def update_task_status(db: Session, task_id: uuid.UUID, status: models.TaskStatus = None, progress: int = None):
+        from ai_pipeline.api_interface import (
+            generate_concepts,
+            generate_quiz_questions,
+            generate_study_guide,
+        )
+        from ai_pipeline.ingest_lecture import ingest_lecture_upload
+        _AI_AVAILABLE = True
+except Exception as _exc:
+    print(f"[ai_service] AI-Pipeline import 실패: {_exc}")
+    traceback.print_exc()
+    _AI_AVAILABLE = False
+
+
+# ---------------------------------------------------------------------------
+# 공통 유틸
+# ---------------------------------------------------------------------------
+
+def update_task_status(
+    db: Session,
+    task_id: uuid.UUID,
+    status: models.TaskStatus = None,
+    progress: int = None,
+):
     """DB의 AITask 상태를 실시간으로 업데이트합니다."""
     task = db.query(models.AITask).filter(models.AITask.task_id == task_id).first()
     if task:
@@ -149,3 +71,212 @@ def update_task_status(db: Session, task_id: uuid.UUID, status: models.TaskStatu
         if progress is not None:
             task.progress = progress
         db.commit()
+
+
+def _lecture_date_str(lecture: models.Lecture | None) -> str | None:
+    if lecture is None or lecture.date is None:
+        return None
+    return lecture.date.isoformat()
+
+
+# ---------------------------------------------------------------------------
+# 1. 개념 추출 (업로드 시 전역 DB 인제스트 후 RAG)
+# ---------------------------------------------------------------------------
+
+def run_concept_extraction(
+    lecture_id: str,
+    content: str,
+    task_id: uuid.UUID,
+    db: Session,
+):
+    """강의 본문을 벡터DB에 반영한 뒤, RAG 컨텍스트로 개념을 추출·저장합니다."""
+    try:
+        update_task_status(db, task_id, status=models.TaskStatus.PROCESSING, progress=10)
+
+        lecture = db.query(models.Lecture).filter(models.Lecture.id == lecture_id).first()
+        lid = str(lecture_id)
+
+        if _AI_AVAILABLE:
+            update_task_status(db, task_id, progress=18)
+            ingest_lecture_upload(
+                content,
+                lecture_id=lid,
+                week=lecture.week if lecture else None,
+                subject=lecture.subject if lecture else None,
+                instructor=lecture.instructor if lecture else None,
+                session=lecture.session if lecture else None,
+                date_str=_lecture_date_str(lecture),
+                title=lecture.title if lecture else None,
+            )
+            update_task_status(db, task_id, progress=45)
+            concepts = generate_concepts(content, lecture_id=lid)
+            update_task_status(db, task_id, progress=80)
+        else:
+            time.sleep(1)
+            update_task_status(db, task_id, progress=30)
+            time.sleep(1)
+            concepts = [
+                {"concept_name": "핵심 개념 (mock)", "description": "AI-Pipeline 미연결 상태의 모의 데이터입니다.", "mastery_score": 0.0},
+                {"concept_name": "세부 주제 (mock)", "description": "AI-Pipeline 패키지를 설치하면 실제 생성으로 전환됩니다.", "mastery_score": 0.0},
+            ]
+            update_task_status(db, task_id, progress=80)
+
+        for c in concepts:
+            db.add(models.Concept(
+                lecture_id=lecture_id,
+                concept_name=c["concept_name"],
+                description=c.get("description", ""),
+                mastery_score=c.get("mastery_score", 0.0),
+            ))
+
+        update_task_status(db, task_id, status=models.TaskStatus.COMPLETED, progress=100)
+        db.commit()
+
+    except Exception as e:
+        update_task_status(db, task_id, status=models.TaskStatus.FAILED, progress=0)
+        print(f"[ai_service] concept_extraction 실패 ({task_id}): {e}")
+        traceback.print_exc()
+        db.commit()
+
+
+# ---------------------------------------------------------------------------
+# 2. 퀴즈 생성 (동일 강의는 이미 인제스트됨 → RAG)
+# ---------------------------------------------------------------------------
+
+def run_quiz_generation(
+    quiz_id: uuid.UUID,
+    lecture_id: uuid.UUID,
+    lecture_content: str,
+    task_id: uuid.UUID,
+    db: Session,
+    *,
+    quiz_type: str = "multiple_choice",
+    quiz_types: list[str] | None = None,
+    difficulty: str = "medium",
+    count: int = 5,
+):
+    """강의별 RAG 컨텍스트로 퀴즈 문항을 생성하여 DB에 저장합니다."""
+    try:
+        update_task_status(db, task_id, status=models.TaskStatus.PROCESSING, progress=10)
+
+        lid = str(lecture_id)
+
+        if _AI_AVAILABLE:
+            update_task_status(db, task_id, progress=30)
+            questions = generate_quiz_questions(
+                content=lecture_content,
+                quiz_type=quiz_type,
+                quiz_types=quiz_types,
+                difficulty=difficulty,
+                count=count,
+                lecture_id=lid,
+            )
+            update_task_status(db, task_id, progress=80)
+        else:
+            time.sleep(1)
+            update_task_status(db, task_id, progress=40)
+            time.sleep(1)
+            questions = [
+                {
+                    "question_text": "다음 중 올바른 설명은? (mock)",
+                    "options": ["보기1", "보기2", "보기3", "보기4"],
+                    "correct_answer": "보기1",
+                    "explanation": "AI-Pipeline 미연결 상태의 모의 데이터입니다.",
+                    "quiz_type": quiz_type,
+                    "difficulty": difficulty,
+                },
+            ]
+            update_task_status(db, task_id, progress=80)
+
+        if not questions:
+            raise ValueError(f"생성된 퀴즈 문항이 0개입니다. quiz_type={quiz_type}, difficulty={difficulty}, count={count}")
+
+        for q in questions:
+            db.add(models.QuizQuestion(
+                quiz_id=quiz_id,
+                question_text=q["question_text"],
+                options=q.get("options", []),
+                correct_answer=q["correct_answer"],
+                explanation=q.get("explanation", ""),
+                quiz_type=q.get("quiz_type", quiz_type),
+                difficulty=q.get("difficulty", difficulty),
+            ))
+
+        update_task_status(db, task_id, status=models.TaskStatus.COMPLETED, progress=100)
+        db.commit()
+
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        update_task_status(db, task_id, status=models.TaskStatus.FAILED, progress=0)
+        print(f"[ai_service] quiz_generation 실패 ({task_id}): {e}")
+        traceback.print_exc()
+        db.commit()
+
+
+# ---------------------------------------------------------------------------
+# 3. 학습 가이드 생성 (RAG 전체 청크 우선)
+# ---------------------------------------------------------------------------
+
+def run_guide_generation(
+    lecture_id: uuid.UUID,
+    content: str,
+    task_id: uuid.UUID,
+    db: Session,
+):
+    """강의별 RAG 컨텍스트로 학습 가이드를 생성하여 DB에 저장합니다."""
+    try:
+        update_task_status(db, task_id, status=models.TaskStatus.PROCESSING, progress=20)
+
+        lid = str(lecture_id)
+
+        if _AI_AVAILABLE:
+            update_task_status(db, task_id, progress=40)
+            guide_data = generate_study_guide(content, lecture_id=lid)
+            update_task_status(db, task_id, progress=80)
+        else:
+            time.sleep(1)
+            update_task_status(db, task_id, progress=60)
+            time.sleep(1)
+            guide_data = {
+                "summary": "AI-Pipeline 미연결 상태의 모의 요약입니다.",
+                "key_summaries": ["핵심 요약 1 (mock)", "핵심 요약 2 (mock)"],
+                "review_checklist": ["복습 항목 1 (mock)", "복습 항목 2 (mock)"],
+                "concept_map": {"nodes": ["개념A", "개념B"], "edges": [{"from": "개념A", "to": "개념B"}]},
+            }
+            update_task_status(db, task_id, progress=80)
+
+        # 강의당 가이드는 1개(Unique)라서, 이미 있으면 update로 처리
+        existing = db.query(models.Guide).filter(models.Guide.lecture_id == lecture_id).first()
+        if existing:
+            existing.summary = guide_data.get("summary", "")
+            existing.key_summaries = guide_data.get("key_summaries", [])
+            existing.review_checklist = guide_data.get("review_checklist", [])
+            existing.concept_map = guide_data.get("concept_map", {})
+        else:
+            db.add(models.Guide(
+                lecture_id=lecture_id,
+                summary=guide_data.get("summary", ""),
+                key_summaries=guide_data.get("key_summaries", []),
+                review_checklist=guide_data.get("review_checklist", []),
+                concept_map=guide_data.get("concept_map", {}),
+            ))
+
+        update_task_status(db, task_id, status=models.TaskStatus.COMPLETED, progress=100)
+        db.commit()
+
+    except Exception as e:
+        # INSERT/FLUSH 실패(유니크 충돌 등) 시 세션이 rollback 상태가 되므로 먼저 rollback
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        update_task_status(db, task_id, status=models.TaskStatus.FAILED, progress=0)
+        print(f"[ai_service] guide_generation 실패 ({task_id}): {e}")
+        traceback.print_exc()
+        try:
+            db.commit()
+        except Exception:
+            pass

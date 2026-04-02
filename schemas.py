@@ -67,6 +67,8 @@ class LectureBase(BaseModel):
     instructor: Optional[str] = None
     session: Optional[str] = None
     date: Optional[py_date] = None
+    learning_goal: Optional[str] = None
+    has_code_quiz: bool = True
     is_active: bool = True
 
 class LectureCreate(LectureBase):
@@ -103,6 +105,8 @@ class QuizQuestionBase(BaseModel):
     options: List[str]
     correct_answer: str
     explanation: Optional[str] = None
+    quiz_type: Optional[str] = None
+    difficulty: Optional[str] = None
 
 class QuizQuestionResponse(QuizQuestionBase):
     id: int
@@ -114,6 +118,14 @@ class QuizQuestionResponse(QuizQuestionBase):
 class QuizBase(BaseModel):
     title: str
     is_active: bool = True
+
+class QuizCreateOptions(BaseModel):
+    # 기존 호환용 (단일 선택)
+    quiz_type: str = "multiple_choice"
+    # 신규: 다중 선택 (여러 유형을 동시에 선택)
+    quiz_types: Optional[List[str]] = None
+    difficulty: str = "medium"
+    count: int = 5
 
 class QuizCreate(QuizBase):
     pass

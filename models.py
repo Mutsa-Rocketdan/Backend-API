@@ -57,12 +57,13 @@ class Lecture(Base):
     title = Column(String, index=True)
     content = Column(Text)
     
-    # 신규 메타데이터 필드 추가
-    week = Column(Integer, nullable=True)     # 주차 (예: 1, 2, 3...)
-    subject = Column(String, nullable=True)  # 과목명
-    instructor = Column(String, nullable=True) # 강사명
-    session = Column(String, nullable=True)    # 교시/세션
-    date = Column(Date, nullable=True)         # 강의 날짜
+    week = Column(Integer, nullable=True)
+    subject = Column(String, nullable=True)
+    instructor = Column(String, nullable=True)
+    session = Column(String, nullable=True)
+    date = Column(Date, nullable=True)
+    learning_goal = Column(Text, nullable=True)
+    has_code_quiz = Column(Boolean, default=True, server_default="true")
 
     # pgvector 도입 전까지는 JSONB에 임베딩 저장 가능
     vector_embedding = Column(JSONB, nullable=True)
@@ -123,9 +124,11 @@ class QuizQuestion(Base):
     id = Column(BigInteger, primary_key=True, index=True)
     quiz_id = Column(UUID(as_uuid=True), ForeignKey("quizzes.id"))
     question_text = Column(Text)
-    options = Column(JSONB)  # e.g., ["option1", "option2", ...]
+    options = Column(JSONB)
     correct_answer = Column(String)
     explanation = Column(Text)
+    quiz_type = Column(String, nullable=True)
+    difficulty = Column(String, nullable=True)
 
     quiz = relationship("Quiz", back_populates="questions")
 
